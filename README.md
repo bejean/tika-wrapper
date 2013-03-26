@@ -28,16 +28,21 @@ System.out.println(wrapper.getText());
 Roadmap
 -------
 
-* Use Snacktory java library in order to aextract the main text of html pages
+* Use my forked of Snacktory java library in order to extract the main text of html pages - https://github.com/bejean/snacktory
 
 
 Build
 -----
 
+In order to build the jar file and get all dependencies in target dir.
+
 <pre>
 mvn clean
 mvn install -Dmaven.test.skip=true
+mvn dependency:copy-dependencies
 </pre>
+
+
 
 
 Dependencies
