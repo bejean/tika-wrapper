@@ -9,19 +9,21 @@ Added features
 * Extract Flash file (.swf) content as text including http links
 * Allows to use PDFTOTEXT as an alternate solution to PDFBox in order to extract text from PDF files (5 to 20 times faster)
 
+
 Usage
 -----
 
 <pre>
-		InputStream is = new FileInputStream("sample.pdf");
+InputStream is = new FileInputStream("sample.pdf");
 
-		TikaWrapper wrapper = new TikaWrapper(format, TikaWrapper.CONTENT_TYPE_PDF);
-		wrapper.setPdfToTextPath("/usr/bin/pdftotext");
-		wrapper.process(is);
+TikaWrapper wrapper = new TikaWrapper(TikaWrapper.OUTPUT_FORMAT_HTML, TikaWrapper.CONTENT_TYPE_PDF);
+wrapper.setPdfToTextPath("/usr/bin/pdftotext");
+wrapper.process(is);
 		
-		System.out.println(wrapper.getMetaTitle());
-		System.out.println(wrapper.getText());
+System.out.println(wrapper.getMetaTitle());
+System.out.println(wrapper.getText());
 </pre>
+
 
 Roadmap
 -------
@@ -29,7 +31,24 @@ Roadmap
 * Use Snacktory java library in order to aextract the main text of html pages
 
 
-LICENSE
+Build
+-----
+
+<pre>
+mvn clean
+mvn install -Dmaven.test.skip=true
+</pre>
+
+
+Dependencies
+------------
+
+As it is not available in a Maven repository, this project includes shell-1.0.jar, a Java system API.
+http://blog.developpez.com/adiguba/p3035/java/runtime_exec_n_est_pas_des_plus_simple
+Shell 1.0 is under CeCILL license - http://www.cecill.info/licences/Licence_CeCILL_V2-en.txt
+
+
+License
 -------
 
 Copyright 2013 Eolya Consulting - http://www.eolya.fr/

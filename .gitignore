@@ -1,9 +1,8 @@
 *.class
 javadoc/
-repo/
 
 # Package Files #
-*.jar
+#*.jar
 *.war
 *.ear
 
@@ -31,7 +30,7 @@ local.properties
 target/
 lib/
 .svn
-doc/
+#doc/
 
 # External tool builders
 .externalToolBuilders/
