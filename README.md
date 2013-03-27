@@ -28,7 +28,7 @@ System.out.println(wrapper.getText());
 Roadmap
 -------
 
-* Use my forked of Snacktory java library in order to extract the main text of html pages - https://github.com/bejean/snacktory
+* Use my forked version of Snacktory java library in order to extract the main text of html pages - https://github.com/bejean/snacktory
 
 
 Build
@@ -43,8 +43,6 @@ mvn dependency:copy-dependencies
 </pre>
 
 
-
-
 Dependencies
 ------------
 
@@ -52,6 +50,18 @@ As it is not available in a Maven repository, this project includes shell-1.0.ja
 http://blog.developpez.com/adiguba/p3035/java/runtime_exec_n_est_pas_des_plus_simple
 Shell 1.0 is under CeCILL license - http://www.cecill.info/licences/Licence_CeCILL_V2-en.txt
 
+
+External tools
+--------------
+
+In order in order to extract text from SWF or PDF files, you need the following tools :
+
+* SWF : swf2thml allows extracting text from SWF files. This tool is available in the "tools" directory 
+
+* PDF : PDFTOTEXT allows extracting text from PDF files. This tools is available on various operating system as standard packages
+    - pdf-utils or poppler-utils according to you Linux distribution
+    - source and binary distributions : http://www.foolabs.com/xpdf/download.html 
+    
 
 License
 -------
