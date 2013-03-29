@@ -46,9 +46,11 @@ mvn dependency:copy-dependencies
 Dependencies
 ------------
 
-As it is not available in a Maven repository, this project includes shell-1.0.jar, a Java system API.
+This project includes shell-1.0.jar, a Java system API.
 http://blog.developpez.com/adiguba/p3035/java/runtime_exec_n_est_pas_des_plus_simple
 Shell 1.0 is under CeCILL license - http://www.cecill.info/licences/Licence_CeCILL_V2-en.txt
+
+As it is not available in a public Maven repository, the project uses a Maven Repository hosted on Github.
 
 
 External tools
