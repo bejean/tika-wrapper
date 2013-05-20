@@ -8,6 +8,8 @@ Added features
 
 * Extract Flash file (.swf) content as text including http links
 * Allows to use PDFTOTEXT as an alternate solution to PDFBox in order to extract text from PDF files (5 to 20 times faster)
+* Extract text from DJVU files (http://djvu.sourceforge.net/)
+* HTML parsing with Snacktory library (https://github.com/bejean/snacktory)
 
 
 Usage
@@ -56,7 +58,7 @@ As it is not available in a public Maven repository, the project uses a Maven Re
 External tools
 --------------
 
-In order in order to extract text from SWF or PDF files, you need the following tools :
+In order in order to extract text from SWF, PDF or DJVU files, you need the following tools :
 
 * SWF : swf2thml allows extracting text from SWF files. This tool is available in the "tools" directory 
 
@@ -64,6 +66,8 @@ In order in order to extract text from SWF or PDF files, you need the following 
     - pdf-utils or poppler-utils according to you Linux distribution
     - source and binary distributions : http://www.foolabs.com/xpdf/download.html 
     
+* DJVU : djvutxt. Download at http://djvu.sourceforge.net/
+
 
 License
 -------

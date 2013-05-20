@@ -56,7 +56,16 @@ import org.xml.sax.ContentHandler;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.safety.Cleaner;
+import org.jsoup.safety.Whitelist;
 import org.jsoup.select.Elements;
+
+import de.jetwick.snacktory.ArticleTextExtractor;
+import de.jetwick.snacktory.JResult;
+import de.jetwick.snacktory.SHelper;
+import de.l3s.boilerpipe.extractors.ArticleExtractor;
+import de.l3s.boilerpipe.extractors.CanolaExtractor;
+import de.l3s.boilerpipe.extractors.DefaultExtractor;
 
 import com.developpez.adiguba.shell.Shell;
 
@@ -74,9 +83,15 @@ public class TikaWrapper {
 	public static String OUTPUT_FORMAT_HTML = "html";
 	public static String OUTPUT_FORMAT_TEXT = "text";
 	public static String OUTPUT_FORMAT_TEXT_MAIN = "text_main";
-
+	public static String OUTPUT_FORMAT_TEXT_MAIN_SNACKTORY = "text_main_snacktory";
+	public static String OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_DEFAULT = "text_main_boilerpipe_default";
+	public static String OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_ARTICLE = "text_main_boilerpipe_article";
+	public static String OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_CANOLA = "text_main_boilerpipe_canola";
+		
 	public static String CONTENT_TYPE_PDF = "application/pdf";
 	public static String CONTENT_TYPE_SWF = "application/x-shockwave-flash";
+	public static String CONTENT_TYPE_HTML = "text/html";
+	public static String CONTENT_TYPE_DJVU = "image/vnd.djvu ";
 
 	private static String META_TITLE = "title";
 	private static String META_AUTHOR = "Author";
@@ -84,10 +99,9 @@ public class TikaWrapper {
 	private static String META_MODIFIED = "modified";
 	private static String META_CONTENTTYPE = "Content-Type";
 	private static String META_CONTENTSIZE = "Content-Size";
-	
+
 	private class OutputType {
-		public void process(InputStream input, OutputStream output, Metadata metadata)
-				throws Exception {
+		public void process(InputStream input, OutputStream output, Metadata metadata) throws Exception {
 			Parser p = parser;
 			ContentHandler handler = getContentHandler(output, metadata);
 			p.parse(input, handler, metadata, context);
@@ -118,13 +132,13 @@ public class TikaWrapper {
 			return new BodyContentHandler(getOutputWriter(output, encoding));
 		}
 	};
-	
-    private final OutputType TEXT_MAIN = new OutputType() {
-        @Override
-        protected ContentHandler getContentHandler(OutputStream output, Metadata metadata) throws Exception {
-            return new BoilerpipeContentHandler(getOutputWriter(output, encoding));
-        }
-    };
+
+	private final OutputType TEXT_MAIN = new OutputType() {
+		@Override
+		protected ContentHandler getContentHandler(OutputStream output, Metadata metadata) throws Exception {
+			return new BoilerpipeContentHandler(getOutputWriter(output, encoding));
+		}
+	};
 
 
 	/**
@@ -142,8 +156,7 @@ public class TikaWrapper {
 			throws UnsupportedEncodingException {
 		if (encoding != null) {
 			return new OutputStreamWriter(output, encoding);
-		} else if (System.getProperty("os.name")
-				.toLowerCase().startsWith("mac os x")) {
+		} else if (System.getProperty("os.name").toLowerCase().startsWith("mac os x")) {
 			// TIKA-324: Override the default encoding on Mac OS X
 			return new OutputStreamWriter(output, "UTF-8");
 		} else {
@@ -182,15 +195,16 @@ public class TikaWrapper {
 	private Parser parser;
 	private boolean prettyPrint = true;
 	private Detector detector;
-	private OutputType type = XML;
-	
+	private OutputType type = null;
+
 	private String outputFormat;
-	
+
 	private IHtmlFormater formater;
 
 	private String tmpPath = null;
 	private String pdfToTextPath = null;
 	private String swfToHtmlPath = null;
+	private String djVuTextPath = null;
 
 	private String contentType;
 
@@ -213,15 +227,15 @@ public class TikaWrapper {
 
 	public TikaWrapper(String outputFormat, String outputEncoding, String contentType) throws Exception {
 		encoding = outputEncoding;
-		if (encoding==null || "".equals(encoding))
-			encoding = "UTF-8";
+		if (encoding==null || "".equals(encoding)) encoding = "UTF-8";
 
 		context = new ParseContext();
 		detector = new DefaultDetector();
 		parser = new AutoDetectParser(detector);
-		
+
 		this.outputFormat = outputFormat;
 		this.contentType = contentType;
+		this.formater = null;
 
 		context.set(Parser.class, parser);
 		context.set(PasswordProvider.class, new PasswordProvider() {
@@ -230,12 +244,26 @@ public class TikaWrapper {
 			}
 		});
 
-		if (OUTPUT_FORMAT_HTML.equals(outputFormat)) {
+		if (OUTPUT_FORMAT_XML.equals(outputFormat)) {
+			type = XML;
+		} else if (OUTPUT_FORMAT_HTML.equals(outputFormat)) {
 			type = HTML;
 		} else if (OUTPUT_FORMAT_TEXT.equals(outputFormat)) {
 			type = TEXT;
 		} else if (OUTPUT_FORMAT_TEXT_MAIN.equals(outputFormat)) {
 			type = TEXT_MAIN;
+		} else {
+			if (contentType==null || "".equals(contentType)) throw new Exception("Incoherent parameters (missing content-type)");
+			if (!CONTENT_TYPE_HTML.equals(contentType) && 
+					(
+							OUTPUT_FORMAT_TEXT_MAIN_SNACKTORY.equals(outputFormat) || 
+							OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_DEFAULT.equals(outputFormat) || 
+							OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_ARTICLE.equals(outputFormat) || 
+							OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_CANOLA.equals(outputFormat)
+					)
+				) {
+				throw new Exception("Incoherent parameters (text/html content-type expected)");
+			}
 		}
 	}
 
@@ -257,6 +285,10 @@ public class TikaWrapper {
 				processWithPdfToText(input);
 			} else if (useSwfToHtml()) {
 				processWithSwfToHtml(input);
+			} else if (useDjVuText()) {
+				processWithDjVuText(input);
+			} else if (useAlternateHtmlParser()) {
+				htmlToText(input);
 			} else {	
 				metadata = new Metadata();
 				processWithTika(TikaInputStream.get(input));
@@ -265,32 +297,34 @@ public class TikaWrapper {
 		catch(Exception e) {}
 	}
 
-	public void process(String url) throws MalformedURLException {
-		URL u;
-		File file = new File(url);
-		if (file.isFile()) {
-			u = file.toURI().toURL();
-		} else {
-			u = new URL(url);
-		}
-		try {
-			text = null;
-			meta2 = null;
-			metadata = null;
-			meta = null;
-			if (usePftToText()) {
-				processWithPdfToText(u.openStream());
-			} else if (useSwfToHtml()) {
-				processWithSwfToHtml(u.openStream());
-			} else {	
-				metadata = new Metadata();
-				if (contentType!=null && !"".equals(contentType)) 
-					metadata.set(Metadata.CONTENT_TYPE, contentType);
-				processWithTika(TikaInputStream.get(u, metadata));
-			}
-		}
-		catch(Exception e) {}
-	}
+//	public void process(String url) throws MalformedURLException {
+//		URL u;
+//		File file = new File(url);
+//		if (file.isFile()) {
+//			u = file.toURI().toURL();
+//		} else {
+//			u = new URL(url);
+//		}
+//		try {
+//			text = null;
+//			meta2 = null;
+//			metadata = null;
+//			meta = null;
+//			if (usePftToText()) {
+//				processWithPdfToText(u.openStream());
+//			} else if (useSwfToHtml()) {
+//				processWithSwfToHtml(u.openStream());
+//			} else if (useAlternateHtmlParser()) {
+//          	htmlToText(input);
+//			} else {	
+//				metadata = new Metadata();
+//				if (contentType!=null && !"".equals(contentType)) 
+//					metadata.set(Metadata.CONTENT_TYPE, contentType);
+//				processWithTika(TikaInputStream.get(u, metadata));
+//			}
+//		}
+//		catch(Exception e) {}
+//	}
 
 	private void processWithTika(InputStream input) {
 		try {
@@ -303,7 +337,122 @@ public class TikaWrapper {
 		}
 		catch(Exception e) {}
 	}
+	
+	private void htmlToText(InputStream input) {
+		
+		String rawData = convertStreamToString(input);
+		
+		try {
+			//String text = "";
+			//String title = "";
+			//String date = "";
+			//String imageUrl = "";
 
+			Document doc = Jsoup.parse(rawData);
+
+			meta2 = new HashMap<String, String>();
+			
+			if (OUTPUT_FORMAT_TEXT_MAIN_SNACKTORY.equals(outputFormat)) {
+				ArticleTextExtractor extractor = new ArticleTextExtractor();
+				JResult res = extractor.extractContent(rawData);
+				text = res.getText();
+
+				meta2.put(META_TITLE, res.getTitle());
+
+				//date = res.getDate(); //  yyyy/mm/dd
+				
+				/*
+				date = SHelper.completeDate(SHelper.estimateDate(url));
+
+				if (date!=null) {
+					Pattern p = Pattern.compile("^([0-9]{4})\\/([0-9]{2})\\/([0-9]{2})");
+					Matcher m = p.matcher(date);
+					if (m.find()) {
+						date = m.group(1) + "-" + m.group(2) + "-" + m.group(3) + " 00:00:00";
+					}
+					else {
+						date = "";
+					}
+				} else {
+					date = "";
+				}
+				*/
+
+				//imageUrl = res.getImageUrl();
+				//imageUrl = HttpUtils.urlGetAbsoluteURL(url, res.getImageUrlBestMatch());
+			} else {
+				if (OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_ARTICLE.equals(outputFormat)) 
+					text = ArticleExtractor.INSTANCE.getText(rawData);
+				if (OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_DEFAULT.equals(outputFormat)) 
+					text = DefaultExtractor.INSTANCE.getText(rawData);
+				if (OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_CANOLA.equals(outputFormat)) 
+					text = CanolaExtractor.INSTANCE.getText(rawData);
+				if (doc!=null) {
+					meta2.put(META_TITLE, doc.select("title").text());
+				}					
+			}
+			
+			if (doc!=null) {
+				if (getMetaContent(doc, "Author")!=null && !"".equals(getMetaContent(doc, "Author"))) meta2.put(META_AUTHOR, getMetaContent(doc, "Author"));
+				String creationDate = getMetaContent(doc, "CreationDate");
+				if (creationDate!=null) {
+					// 20130322143113Z00'00' -> 2013-03-22T14:31:13Z
+					Pattern p = Pattern.compile("[0-9]{14}Z[0-9]{2}'[0-9]{2}'");
+					Matcher m = p.matcher(creationDate);
+					if (m.find()) {
+						String value = String.format("%1$s-%2$s-%3$sT%4$s:%5$s:%6$sZ",
+								creationDate.substring(0, 4), creationDate.substring(4, 6), creationDate.substring(6, 8), creationDate.substring(8, 10), creationDate.substring(10, 12), creationDate.substring(12, 14));
+						meta2.put(META_CREATED, value);
+					} else {
+						// 20130322143113+02'00' -> 2013-03-22T14:31:13Z
+						p = Pattern.compile("[0-9]{14}\\+[0-9]{2}'[0-9]{2}'");
+						m = p.matcher(creationDate);
+						if (m.find()) {
+							String value = String.format("%1$s-%2$s-%3$sT%4$s:%5$s:%6$sZ",
+									creationDate.substring(0, 4), creationDate.substring(4, 6), creationDate.substring(6, 8), creationDate.substring(8, 10), creationDate.substring(10, 12), creationDate.substring(12, 14));
+							meta2.put(META_CREATED, value);
+						}
+					}
+				}
+			}					
+				
+			meta2.put(META_CONTENTSIZE, String.valueOf(rawData.length()));
+			meta2.put(META_CONTENTTYPE, CONTENT_TYPE_HTML);			
+		} 
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+//	private static String jsoupParse(String html) {
+//		String html2 = html.replaceAll("(?i)<br[^>]*>", "br2n");
+//		html2 = html2.replaceAll("(?i)<p[^>]*>", "br2n<p>");
+//		html2 = html2.replaceAll("(?i)<div[^>]*>", "br2n<div>");
+//		html2 = html2.replaceAll("(?i)<li[^>]*>", "br2n<li>");
+//		String text = Jsoup.parse(html2).text();
+//		text = text.replaceAll("(br2n)+\\s*", "\n");
+//		return text;
+//	}
+
+
+	private static String convertStreamToString(InputStream input) {
+		try {
+			InputStreamReader is = new InputStreamReader(input);
+			StringBuilder sb=new StringBuilder();
+			BufferedReader br = new BufferedReader(is);
+			String read = br.readLine();
+			while(read != null) {
+			    sb.append(read);
+			    read =br.readLine();
+	
+			}
+			return sb.toString();
+		} 
+		catch(Exception e) {
+			return null;
+		}		
+	}
+	
 	public String getText() {
 		if (output!=null) return output.toString();
 		return text;
@@ -331,7 +480,7 @@ public class TikaWrapper {
 		if (value!=null && value.indexOf(";")!=-1) value = value.substring(0, value.indexOf(";")).trim();
 		return value;
 	}
-	
+
 	public String getMetaCharSet() {
 		if (getMetas()==null) return null;
 		String value = getMetas().get(META_CONTENTTYPE);
@@ -365,7 +514,7 @@ public class TikaWrapper {
 	}
 
 	private boolean usePftToText() {
-		return (pdfToTextPath!=null && !"".equals(pdfToTextPath) && contentType!=null && !"".equals(contentType));
+		return (pdfToTextPath!=null && !"".equals(pdfToTextPath) && contentType!=null && CONTENT_TYPE_PDF.equals(contentType));
 	}
 
 	public void setSwfToHtmlPath(String swfToHtmlPath) {
@@ -373,11 +522,30 @@ public class TikaWrapper {
 	}
 
 	private boolean useSwfToHtml() {
-		return (swfToHtmlPath!=null && !"".equals(swfToHtmlPath) && contentType!=null && !"".equals(contentType));
+		return (swfToHtmlPath!=null && !"".equals(swfToHtmlPath) && contentType!=null && CONTENT_TYPE_SWF.equals(contentType));
 	}
-	
+
+	public void setDjVuTextPath(String djVuTextPath) {
+		this.djVuTextPath = djVuTextPath;	
+	}
+
+	private boolean useDjVuText() {
+		return (djVuTextPath!=null && !"".equals(djVuTextPath) && contentType!=null && CONTENT_TYPE_DJVU.equals(contentType));
+	}
+
 	public void setHtmlFormater(IHtmlFormater formater) {
 		this.formater = formater;	
+	}
+
+	public boolean useAlternateHtmlParser() {
+		return (CONTENT_TYPE_HTML.equals(contentType) && 
+				(
+						OUTPUT_FORMAT_TEXT_MAIN_SNACKTORY.equals(outputFormat) || 
+						OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_DEFAULT.equals(outputFormat) || 
+						OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_ARTICLE.equals(outputFormat) || 
+						OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_CANOLA.equals(outputFormat)
+				)
+			);
 	}
 	
 	private String getMetaContent(Document doc, String metaName) {
@@ -385,72 +553,93 @@ public class TikaWrapper {
 		if (e==null || e.first()==null) return null;
 		return e.first().attr("content");
 	}
-	
-	private void processWithPdfToText(InputStream input) {
-		File tempFile = null;
-		File tempFile2 = null;
-		try {
-			// Get a local copy of the file
-			tempFile = createTempFile("tmp", ".pdf", tmpPath);
 
+	private boolean writeToFile(File tempFile, InputStream input) {
+		try {
 			OutputStream out=new FileOutputStream(tempFile);
 			byte buf[]=new byte[1024];
 			int len;
 			while((len=input.read(buf))>0)
 				out.write(buf,0,len);
 			out.close();
-			input.close();				
-
-			meta2 = new HashMap<String, String>();
-			meta2.put(META_CONTENTSIZE, String.valueOf(tempFile.length()));
-
-			tempFile2 = createTempFile("tmp", ".html", tmpPath);
-
-			Shell sh = new Shell(); 
-
-			// Convert with PDFTOTEXT - pdftotext -enc UTF-8 -raw -q -htmlmeta -eol unix in.pdf out.html
-			sh.exec(pdfToTextPath, "-enc", "UTF-8", "-raw", "-q", "-htmlmeta", "-eol", "unix", tempFile.getAbsolutePath(), tempFile2.getAbsolutePath()).consumeAsString();
-			tempFile.delete();
-
-			// Load in string and add the <meta http-equiv='Content-Type' content='text/html; charset=utf-8'> line
-			InputStreamReader fr1 =  new InputStreamReader(new FileInputStream(tempFile2), "UTF-8");
-			BufferedReader br1 = new BufferedReader(fr1);
-			StringBuilder sb = new StringBuilder();
-
-			while(br1.ready()){
-				String line = br1.readLine();
-				sb.append(line).append("\n");
-				if ("</head>".equals(line))
-				{
-					sb.append("<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>").append("\n");
-				}
-			}
-			br1.close() ;
-			tempFile2.delete();
-
-			meta2.put(META_CONTENTTYPE, CONTENT_TYPE_PDF);
-
-			text = sb.toString();
-
-			Document doc = Jsoup.parse(text);
-			if (doc!=null) {
-				meta2.put(META_TITLE, doc.select("title").text());
-				meta2.put(META_AUTHOR, getMetaContent(doc, "Author"));
-				String creationDate = getMetaContent(doc, "CreationDate");
-				if (creationDate!=null) {
-					// 20130322143113Z00'00' -> 2013-03-22T14:31:13Z
-					Pattern p = Pattern.compile("[0-9]{14}Z[0-9]{2}'[0-9]{2}'");
-					Matcher m = p.matcher(creationDate);
-					if (m.find()) {
-						String value = String.format("%1$s-%2$s-%3$sT%4$s:%5$s:%6$sZ",
-								creationDate.substring(0, 4), creationDate.substring(4, 6), creationDate.substring(6, 8), creationDate.substring(8, 10), creationDate.substring(10, 12), creationDate.substring(12, 14));
-						meta2.put(META_CREATED, value);
+			input.close();	
+		} 
+		catch (Exception e) {
+			if (tempFile!=null && tempFile.exists()) tempFile.delete();
+			e.printStackTrace();
+			return false;
+		}
+		return true;
+	}
+	
+	private void processWithPdfToText(InputStream input) {
+		File tempFile = null;
+		File tempFile2 = null;
+		try {
+			if (input!=null && pdfToTextPath!=null && !"".equals(pdfToTextPath)) {
+				// Get a local copy of the file
+				tempFile = createTempFile("tmp", ".pdf", tmpPath);
+				if (!writeToFile(tempFile, input)) return;
+				
+				meta2 = new HashMap<String, String>();
+				meta2.put(META_CONTENTSIZE, String.valueOf(tempFile.length()));
+	
+				tempFile2 = createTempFile("tmp", ".html", tmpPath);
+	
+				Shell sh = new Shell(); 
+	
+				// Convert with PDFTOTEXT - pdftotext -enc UTF-8 -raw -q -htmlmeta -eol unix in.pdf out.html
+				sh.exec(pdfToTextPath, "-enc", "UTF-8", "-raw", "-q", "-htmlmeta", "-eol", "unix", tempFile.getAbsolutePath(), tempFile2.getAbsolutePath()).consumeAsString();
+				tempFile.delete();
+	
+				// Load in string and add the <meta http-equiv='Content-Type' content='text/html; charset=utf-8'> line
+				InputStreamReader fr1 =  new InputStreamReader(new FileInputStream(tempFile2), "UTF-8");
+				BufferedReader br1 = new BufferedReader(fr1);
+				StringBuilder sb = new StringBuilder();
+	
+				while(br1.ready()){
+					String line = br1.readLine();
+					sb.append(line).append("\n");
+					if ("</head>".equals(line))
+					{
+						sb.append("<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>").append("\n");
 					}
 				}
-				if (OUTPUT_FORMAT_TEXT.equals(outputFormat)) {
-					text = doc.body().text();
-					//IHtmlFormater formater = new HtmlToPlaintTextFormater();
-					//text = formater.getPlainText(doc);
+				br1.close() ;
+				tempFile2.delete();
+	
+				meta2.put(META_CONTENTTYPE, CONTENT_TYPE_PDF);
+	
+				text = sb.toString();
+	
+				Document doc = Jsoup.parse(text);
+				if (doc!=null) {
+					meta2.put(META_TITLE, doc.select("title").text());
+					meta2.put(META_AUTHOR, getMetaContent(doc, "Author"));
+					String creationDate = getMetaContent(doc, "CreationDate");
+					if (creationDate!=null) {
+						// 20130322143113Z00'00' -> 2013-03-22T14:31:13Z
+						Pattern p = Pattern.compile("[0-9]{14}Z[0-9]{2}'[0-9]{2}'");
+						Matcher m = p.matcher(creationDate);
+						if (m.find()) {
+							String value = String.format("%1$s-%2$s-%3$sT%4$s:%5$s:%6$sZ",
+									creationDate.substring(0, 4), creationDate.substring(4, 6), creationDate.substring(6, 8), creationDate.substring(8, 10), creationDate.substring(10, 12), creationDate.substring(12, 14));
+							meta2.put(META_CREATED, value);
+						} else {
+							// 20130322143113+02'00' -> 2013-03-22T14:31:13Z
+							p = Pattern.compile("[0-9]{14}\\+[0-9]{2}'[0-9]{2}'");
+							m = p.matcher(creationDate);
+							if (m.find()) {
+								String value = String.format("%1$s-%2$s-%3$sT%4$s:%5$s:%6$sZ",
+										creationDate.substring(0, 4), creationDate.substring(4, 6), creationDate.substring(6, 8), creationDate.substring(8, 10), creationDate.substring(10, 12), creationDate.substring(12, 14));
+								meta2.put(META_CREATED, value);
+							}
+						}
+					}
+					if (OUTPUT_FORMAT_TEXT.equals(outputFormat)) {
+						Document doc2 = new Cleaner(Whitelist.basic()).clean(doc);
+						text = doc2.body().text();
+					}
 				}
 			}
 		} 
@@ -472,14 +661,7 @@ public class TikaWrapper {
 			if (input!=null && swfToHtmlPath!=null && !"".equals(swfToHtmlPath)) {
 				// Get a local copy of the file
 				tempFile = File.createTempFile("tmp", ".swf");
-
-				OutputStream out=new FileOutputStream(tempFile);
-				byte buf[]=new byte[1024];
-				int len;
-				while((len=input.read(buf))>0)
-					out.write(buf,0,len);
-				out.close();
-				input.close();					
+				if (!writeToFile(tempFile, input)) return;
 
 				// Convert with SWF2HTML
 				tempFile2 = File.createTempFile("tmp", ".html");
@@ -502,10 +684,9 @@ public class TikaWrapper {
 						data = formater.getPlainText(data);
 					} else {
 						data = Jsoup.parse(data).body().text();
-						
+
 					}
 				}
-
 				text = data;	
 			}
 		}
@@ -514,6 +695,39 @@ public class TikaWrapper {
 			if (tempFile2!=null && tempFile2.exists()) tempFile2.delete();
 			e.printStackTrace();
 		}
+	}
+	
+	private void processWithDjVuText(InputStream input) {
+		// TODO : http://djvu.sourceforge.net/doc/man/djvutxt.html
+		// djvutxt inputdjvufile outputtxtfile
+		// http://www.global-language.com/CENTURY/
+		File tempFile = null;
+		File tempFile2 = null;
+		try {
+			if (input!=null && djVuTextPath!=null && !"".equals(djVuTextPath)) {
+				// Get a local copy of the file
+				tempFile = createTempFile("tmp", ".pdf", tmpPath);
+				if (!writeToFile(tempFile, input)) return;
+				
+				// Convert with SWF2HTML
+				tempFile2 = File.createTempFile("tmp", ".txt");
+
+				Shell sh = new Shell(); 
+				sh.exec(djVuTextPath, tempFile.getAbsolutePath(), tempFile2.getAbsolutePath()).consumeAsString();
+				tempFile.delete();
+
+				String data = FileUtils.readFileToString(tempFile2, "UTF-8"); 
+
+				tempFile2.delete();
+
+				text = data;	
+			}
+		}
+		catch (Exception e) {
+			if (tempFile!=null && tempFile.exists()) tempFile.delete();
+			if (tempFile2!=null && tempFile2.exists()) tempFile2.delete();
+			e.printStackTrace();
+		}				
 	}
 
 	private static File createTempFile(String prefix, String suffix, String directory) throws IOException {
