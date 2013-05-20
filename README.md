@@ -27,12 +27,6 @@ System.out.println(wrapper.getText());
 </pre>
 
 
-Roadmap
--------
-
-* Use my forked version of Snacktory java library in order to extract the main text of html pages - https://github.com/bejean/snacktory
-
-
 Build
 -----
 
