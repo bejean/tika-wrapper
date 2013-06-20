@@ -62,6 +62,7 @@ import org.jsoup.select.Elements;
 
 import de.jetwick.snacktory.ArticleTextExtractor;
 import de.jetwick.snacktory.JResult;
+import de.jetwick.snacktory.OutputFormatter;
 import de.jetwick.snacktory.SHelper;
 import de.l3s.boilerpipe.extractors.ArticleExtractor;
 import de.l3s.boilerpipe.extractors.CanolaExtractor;
@@ -354,6 +355,9 @@ public class TikaWrapper {
 			
 			if (OUTPUT_FORMAT_TEXT_MAIN_SNACKTORY.equals(outputFormat)) {
 				ArticleTextExtractor extractor = new ArticleTextExtractor();
+				OutputFormatter outputFormater = new OutputFormatter(10);
+				outputFormater.setnodesToKeepCssSelector("p,h1,h2,h3,h4,h5,h6");
+				extractor.setOutputFormatter(outputFormater);
 				JResult res = extractor.extractContent(rawData);
 				text = res.getText();
 
