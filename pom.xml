@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>fr.eolya</groupId>
 	<artifactId>tika-wrapper</artifactId>
-	<version>0.4</version>
+	<version>0.5</version>
 	<name>Multi-Format Text Extractor</name>
 	<repositories>
 		<repository>
