@@ -356,7 +356,7 @@ public class TikaWrapper {
 			if (OUTPUT_FORMAT_TEXT_MAIN_SNACKTORY.equals(outputFormat)) {
 				ArticleTextExtractor extractor = new ArticleTextExtractor();
 				OutputFormatter outputFormater = new OutputFormatter(10);
-				outputFormater.setnodesToKeepCssSelector("p,h1,h2,h3,h4,h5,h6");
+				outputFormater.setNodesToKeepCssSelector("p,h1,h2,h3,h4,h5,h6");
 				extractor.setOutputFormatter(outputFormater);
 				JResult res = extractor.extractContent(rawData);
 				text = res.getText();
