@@ -29,16 +29,16 @@ public class TikaWrapperTest extends TestCase {
 
 	static final String pdfToTextPath = "/usr/local/bin/pdftotext";
 	static final String swfToHtmlPath = "/opt/tools/swf2html";
-	static final String djVuTextPath = "/opt/tools/djvu/bin/djvutxt";
+	//static final String djVuTextPath = "/opt/tools/djvu/bin/djvutxt";
 	
 	@Test
 	public void testPdfTika() {		
 		boolean content = true;
 		boolean verbose = true;
 		String format = TikaWrapper.OUTPUT_FORMAT_TEXT;
-		String fileName = "../doc/java.pdf";
+		String fileName = "/fr/eolya/extraction/doc/java.pdf";
 
-		InputStream i = getClass().getResourceAsStream(fileName);
+		InputStream i = getClass().getResourceAsStream(fileName);		
 		
 		TikaWrapper mfte;
 		try {
@@ -59,12 +59,13 @@ public class TikaWrapperTest extends TestCase {
 		String fileName = "../doc/java.pdf";
 		
 		InputStream i = getClass().getResourceAsStream(fileName);
+		assertFalse(i==null);
 		
 		TikaWrapper mfte;
 		try {
-			mfte = new TikaWrapper(format, TikaWrapper.CONTENT_TYPE_PDF);
+			mfte = new TikaWrapper(format);
 			mfte.setPdfToTextPath(pdfToTextPath);
-			mfte.process(i);
+			mfte.process(i, TikaWrapper.CONTENT_TYPE_PDF);
 			dumpDoc(mfte, fileName, content, verbose);		
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -79,16 +80,17 @@ public class TikaWrapperTest extends TestCase {
 		String fileName = "../doc/reflection.swf";
 		
 		InputStream i = getClass().getResourceAsStream(fileName);
+		assertFalse(i==null);
 		
 		TikaWrapper mfte;
 		try {
-			mfte = new TikaWrapper(format, TikaWrapper.CONTENT_TYPE_SWF);
+			mfte = new TikaWrapper(format);
 			mfte.setSwfToHtmlPath(swfToHtmlPath);
 			
 			IHtmlFormater formater = new HtmlToPlaintTextSimple();
 			mfte.setHtmlFormater(formater);
 			
-			mfte.process(i);
+			mfte.process(i, TikaWrapper.CONTENT_TYPE_SWF);
 			dumpDoc(mfte, fileName, content, verbose);		
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -96,32 +98,64 @@ public class TikaWrapperTest extends TestCase {
 	}
 	
 	@Test
-	public void testDjVu() {
-		
-		// more files for tests
-		// ftp://vpa.users.odessa.comstar.net.ua/public/Sci_Library/Phys%20Library/PPop_Popular-level/
-		
+	public void testSeveral() {
 		boolean content = true;
 		boolean verbose = true;
 		String format = TikaWrapper.OUTPUT_FORMAT_TEXT;
-		String fileName = "../doc/Test.djvu";
-		
-		InputStream i = getClass().getResourceAsStream(fileName);
 		
 		TikaWrapper mfte;
 		try {
-			mfte = new TikaWrapper(format, TikaWrapper.CONTENT_TYPE_DJVU);
-			mfte.setDjVuTextPath(djVuTextPath);
+			mfte = new TikaWrapper(format);
+
+			String fileName = "../doc/java.pdf";
+			InputStream i = getClass().getResourceAsStream(fileName);		
+			assertFalse(i==null);
+			mfte.process(i);
+			dumpDoc(mfte, fileName, content, verbose);		
 			
-			IHtmlFormater formater = new HtmlToPlaintTextSimple();
-			mfte.setHtmlFormater(formater);
-			
+			fileName = "../doc/fr.pdf";
+			i = getClass().getResourceAsStream(fileName);				
+			assertFalse(i==null);
+			mfte.process(i);
+			dumpDoc(mfte, fileName, content, verbose);		
+
+			fileName = "../doc/en.pdf";
+			i = getClass().getResourceAsStream(fileName);				
+			assertFalse(i==null);
 			mfte.process(i);
 			dumpDoc(mfte, fileName, content, verbose);		
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
+	
+//	@Test
+//	public void testDjVu() {
+//		
+//		// more files for tests
+//		// ftp://vpa.users.odessa.comstar.net.ua/public/Sci_Library/Phys%20Library/PPop_Popular-level/
+//		
+//		boolean content = true;
+//		boolean verbose = true;
+//		String format = TikaWrapper.OUTPUT_FORMAT_TEXT;
+//		String fileName = "../doc/Test.djvu";
+//		
+//		InputStream i = getClass().getResourceAsStream(fileName);
+//		
+//		TikaWrapper mfte;
+//		try {
+//			mfte = new TikaWrapper(format);
+//			mfte.setDjVuTextPath(djVuTextPath);
+//			
+//			IHtmlFormater formater = new HtmlToPlaintTextSimple();
+//			mfte.setHtmlFormater(formater);
+//			
+//			mfte.process(i, TikaWrapper.CONTENT_TYPE_DJVU);
+//			dumpDoc(mfte, fileName, content, verbose);		
+//		} catch (Exception e) {
+//			e.printStackTrace();
+//		}
+//	}
 
 	private static void dumpDoc(TikaWrapper mfte, String url, boolean content, boolean verbose) {
 		System.out.println("========================================================");

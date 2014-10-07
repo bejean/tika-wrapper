@@ -28,7 +28,6 @@ import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
 import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -63,7 +62,6 @@ import org.jsoup.select.Elements;
 import de.jetwick.snacktory.ArticleTextExtractor;
 import de.jetwick.snacktory.JResult;
 import de.jetwick.snacktory.OutputFormatter;
-import de.jetwick.snacktory.SHelper;
 import de.l3s.boilerpipe.extractors.ArticleExtractor;
 import de.l3s.boilerpipe.extractors.CanolaExtractor;
 import de.l3s.boilerpipe.extractors.DefaultExtractor;
@@ -226,7 +224,7 @@ public class TikaWrapper {
 	 */
 	private String password = null;
 
-	public TikaWrapper(String outputFormat, String outputEncoding, String contentType) throws Exception {
+	public TikaWrapper(String outputFormat, String outputEncoding) throws Exception {
 		encoding = outputEncoding;
 		if (encoding==null || "".equals(encoding)) encoding = "UTF-8";
 
@@ -235,7 +233,7 @@ public class TikaWrapper {
 		parser = new AutoDetectParser(detector);
 
 		this.outputFormat = outputFormat;
-		this.contentType = contentType;
+		//this.contentType = contentType;
 		this.formater = null;
 
 		context.set(Parser.class, parser);
@@ -244,40 +242,42 @@ public class TikaWrapper {
 				return password;
 			}
 		});
+	}
 
-		if (OUTPUT_FORMAT_XML.equals(outputFormat)) {
-			type = XML;
-		} else if (OUTPUT_FORMAT_HTML.equals(outputFormat)) {
-			type = HTML;
-		} else if (OUTPUT_FORMAT_TEXT.equals(outputFormat)) {
-			type = TEXT;
-		} else if (OUTPUT_FORMAT_TEXT_MAIN.equals(outputFormat)) {
-			type = TEXT_MAIN;
-		} else {
-			if (contentType==null || "".equals(contentType)) throw new Exception("Incoherent parameters (missing content-type)");
-			if (!CONTENT_TYPE_HTML.equals(contentType) && 
-					(
+	public TikaWrapper(String outputFormat) throws Exception {
+		this(outputFormat, "UTF-8");
+	}
+
+	public void process(InputStream input) throws MalformedURLException {
+		process(input, null);
+	}
+
+	public void process(InputStream input, String contentType) throws MalformedURLException {
+		try {
+			this.contentType = contentType;
+
+			if (OUTPUT_FORMAT_XML.equals(outputFormat)) {
+				type = XML;
+			} else if (OUTPUT_FORMAT_HTML.equals(outputFormat)) {
+				type = HTML;
+			} else if (OUTPUT_FORMAT_TEXT.equals(outputFormat)) {
+				type = TEXT;
+			} else if (OUTPUT_FORMAT_TEXT_MAIN.equals(outputFormat)) {
+				type = TEXT_MAIN;
+			} else {
+				if (contentType==null || "".equals(contentType)) throw new Exception("Incoherent parameters (missing content-type)");
+				if (!CONTENT_TYPE_HTML.equals(contentType) && 
+						(
 							OUTPUT_FORMAT_TEXT_MAIN_SNACKTORY.equals(outputFormat) || 
 							OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_DEFAULT.equals(outputFormat) || 
 							OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_ARTICLE.equals(outputFormat) || 
 							OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_CANOLA.equals(outputFormat)
-					)
-				) {
-				throw new Exception("Incoherent parameters (text/html content-type expected)");
+						)
+					) {
+					throw new Exception("Incoherent parameters (text/html content-type expected)");
+				}
 			}
-		}
-	}
-
-	public TikaWrapper(String outputFormat) throws Exception {
-		this(outputFormat, "UTF-8", null);
-	}
-
-	public TikaWrapper(String outputFormat, String contentType) throws Exception {
-		this(outputFormat, "UTF-8", contentType);
-	}
-
-	public void process(InputStream input) throws MalformedURLException {
-		try {
+			
 			text = null;
 			meta2 = null;
 			metadata = null;
@@ -298,35 +298,6 @@ public class TikaWrapper {
 		catch(Exception e) {}
 	}
 
-//	public void process(String url) throws MalformedURLException {
-//		URL u;
-//		File file = new File(url);
-//		if (file.isFile()) {
-//			u = file.toURI().toURL();
-//		} else {
-//			u = new URL(url);
-//		}
-//		try {
-//			text = null;
-//			meta2 = null;
-//			metadata = null;
-//			meta = null;
-//			if (usePftToText()) {
-//				processWithPdfToText(u.openStream());
-//			} else if (useSwfToHtml()) {
-//				processWithSwfToHtml(u.openStream());
-//			} else if (useAlternateHtmlParser()) {
-//          	htmlToText(input);
-//			} else {	
-//				metadata = new Metadata();
-//				if (contentType!=null && !"".equals(contentType)) 
-//					metadata.set(Metadata.CONTENT_TYPE, contentType);
-//				processWithTika(TikaInputStream.get(u, metadata));
-//			}
-//		}
-//		catch(Exception e) {}
-//	}
-
 	private void processWithTika(InputStream input) {
 		try {
 			output = new ByteArrayOutputStream();
@@ -344,11 +315,6 @@ public class TikaWrapper {
 		String rawData = convertStreamToString(input);
 		
 		try {
-			//String text = "";
-			//String title = "";
-			//String date = "";
-			//String imageUrl = "";
-
 			Document doc = Jsoup.parse(rawData);
 
 			meta2 = new HashMap<String, String>();
@@ -364,7 +330,6 @@ public class TikaWrapper {
 				meta2.put(META_TITLE, res.getTitle());
 
 				//date = res.getDate(); //  yyyy/mm/dd
-				
 				/*
 				date = SHelper.completeDate(SHelper.estimateDate(url));
 
@@ -427,17 +392,6 @@ public class TikaWrapper {
 			e.printStackTrace();
 		}
 	}
-	
-//	private static String jsoupParse(String html) {
-//		String html2 = html.replaceAll("(?i)<br[^>]*>", "br2n");
-//		html2 = html2.replaceAll("(?i)<p[^>]*>", "br2n<p>");
-//		html2 = html2.replaceAll("(?i)<div[^>]*>", "br2n<div>");
-//		html2 = html2.replaceAll("(?i)<li[^>]*>", "br2n<li>");
-//		String text = Jsoup.parse(html2).text();
-//		text = text.replaceAll("(br2n)+\\s*", "\n");
-//		return text;
-//	}
-
 
 	private static String convertStreamToString(InputStream input) {
 		try {
@@ -518,7 +472,7 @@ public class TikaWrapper {
 	}
 
 	private boolean usePftToText() {
-		return (pdfToTextPath!=null && !"".equals(pdfToTextPath) && contentType!=null && CONTENT_TYPE_PDF.equals(contentType));
+		return (pdfToTextPath!=null && !"".equals(pdfToTextPath) && CONTENT_TYPE_PDF.equals(contentType));
 	}
 
 	public void setSwfToHtmlPath(String swfToHtmlPath) {
@@ -526,7 +480,7 @@ public class TikaWrapper {
 	}
 
 	private boolean useSwfToHtml() {
-		return (swfToHtmlPath!=null && !"".equals(swfToHtmlPath) && contentType!=null && CONTENT_TYPE_SWF.equals(contentType));
+		return (swfToHtmlPath!=null && !"".equals(swfToHtmlPath) && CONTENT_TYPE_SWF.equals(contentType));
 	}
 
 	public void setDjVuTextPath(String djVuTextPath) {
@@ -534,7 +488,7 @@ public class TikaWrapper {
 	}
 
 	private boolean useDjVuText() {
-		return (djVuTextPath!=null && !"".equals(djVuTextPath) && contentType!=null && CONTENT_TYPE_DJVU.equals(contentType));
+		return (djVuTextPath!=null && !"".equals(djVuTextPath) && CONTENT_TYPE_DJVU.equals(contentType));
 	}
 
 	public void setHtmlFormater(IHtmlFormater formater) {
@@ -544,10 +498,10 @@ public class TikaWrapper {
 	public boolean useAlternateHtmlParser() {
 		return (CONTENT_TYPE_HTML.equals(contentType) && 
 				(
-						OUTPUT_FORMAT_TEXT_MAIN_SNACKTORY.equals(outputFormat) || 
-						OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_DEFAULT.equals(outputFormat) || 
-						OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_ARTICLE.equals(outputFormat) || 
-						OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_CANOLA.equals(outputFormat)
+					OUTPUT_FORMAT_TEXT_MAIN_SNACKTORY.equals(outputFormat) || 
+					OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_DEFAULT.equals(outputFormat) || 
+					OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_ARTICLE.equals(outputFormat) || 
+					OUTPUT_FORMAT_TEXT_MAIN_BOILERPIPE_CANOLA.equals(outputFormat)
 				)
 			);
 	}
